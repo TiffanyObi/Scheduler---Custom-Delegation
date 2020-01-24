@@ -16,12 +16,12 @@ public enum DataPersistenceError: Error {
   case noContentsAtPath(String)
 }
 
-
-class DataPersistence {
+// data persistence is nw type contrained to only work with codable types.
+class DataPersistence<T: Codable & Equatable> {
   
   private let filename: String
   
-  private var items: [Event]
+  private var items: [T]
       
   public init(filename: String) {
     self.filename = filename
@@ -39,7 +39,7 @@ class DataPersistence {
   }
   
   // Create
-  public func createItem(_ item: Event) throws {
+  public func createItem(_ item: T) throws {
     _ = try? loadItems()
     items.append(item)
     do {
@@ -50,12 +50,12 @@ class DataPersistence {
   }
   
   // Read
-  public func loadItems() throws -> [Event] {
+  public func loadItems() throws -> [T] {
     let path = FileManager.getPath(with: filename, for: .documentsDirectory).path
      if FileManager.default.fileExists(atPath: path) {
        if let data = FileManager.default.contents(atPath: path) {
          do {
-           items = try PropertyListDecoder().decode([Event].self, from: data)
+           items = try PropertyListDecoder().decode([T].self, from: data)
          } catch {
           throw DataPersistenceError.propertyListDecodingError(error)
          }
@@ -65,12 +65,35 @@ class DataPersistence {
   }
   
   // for re-ordering, and keeping date in sync
-  public func synchronize(_ items: [Event]) {
+  public func synchronize(_ items: [T]) {
     self.items = items
     try? saveItemsToDocumentsDirectory()
   }
   
   // Update
+    @discardableResult // silences the warning if the return value is not used by the caller.
+    public func update(_ oldItem: T, with newItem: T) -> Bool{
+        //basically we want to find the index of the oldItem and put the newItem into that place.
+        // this is trying to see is oldItem == "currentItem" but Event has to conform to Equatable inorder to search using "firstIndex."
+        if let index = items.firstIndex(of: oldItem) {
+           let result = update(newItem, at: index)
+            return result
+        }
+        return true
+    }
+    
+    @discardableResult // silences the warning if the return value is not used by the caller.
+    public func update(_ item: T, at index: Int) -> Bool {
+        items[index] = item
+        
+        //save item to Documents Directory
+        do {
+            try saveItemsToDocumentsDirectory()
+            return true
+        }catch {
+            return false
+        }
+    }
   
   // Delete
   public func deleteItem(at index: Int) throws {
@@ -82,7 +105,7 @@ class DataPersistence {
     }
   }
   
-  public func hasItemBeenSaved(_ item: Event) -> Bool {
+  public func hasItemBeenSaved(_ item: T) -> Bool {
     guard let items = try? loadItems() else {
       return false
     }
